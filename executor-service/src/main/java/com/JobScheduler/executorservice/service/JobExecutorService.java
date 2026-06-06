@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -64,7 +65,7 @@ public class JobExecutorService {
     }
 
     private void executeJob(ExecutionRequest request) {
-        Long jobId = request.getJobId();
+        UUID jobId = request.getJobId();
         LocalDateTime scheduleTime = request.getScheduleTime();
         String heartbeatKey = "heartbeat:" + jobId;
         String cancelKey = "cancel:" + jobId;
@@ -87,7 +88,10 @@ public class JobExecutorService {
             int elapsed = 0;
             while (elapsed < durationSeconds) {
                 // Check cancel signal
-                if (Boolean.TRUE.equals(redisTemplate.hasKey(cancelKey))) {
+                // Check cancel signal
+                String cancelValue = redisTemplate.opsForValue().get(cancelKey);
+                log.info("Cancel check for job {} — key: {}, value: {}", jobId, cancelKey, cancelValue);
+                if (cancelValue != null) {
                     log.info("Cancel signal detected for job {}", jobId);
                     jobRepository.updateStatus(jobId, scheduleTime, JobStatus.CANCELLED, LocalDateTime.now());
                     cleanupRedis(heartbeatKey, cancelKey);

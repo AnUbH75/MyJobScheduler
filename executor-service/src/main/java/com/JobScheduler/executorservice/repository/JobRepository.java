@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Repository
 public interface JobRepository extends JpaRepository<Job, JobId> {
@@ -19,7 +20,7 @@ public interface JobRepository extends JpaRepository<Job, JobId> {
     @Transactional
     @Query("UPDATE Job j SET j.status = :status, j.updatedAt = :updatedAt " +
             "WHERE j.id = :id AND j.scheduleTime = :scheduleTime")
-    int updateStatus(@Param("id") Long id,
+    int updateStatus(@Param("id") UUID id,
                      @Param("scheduleTime") LocalDateTime scheduleTime,
                      @Param("status") JobStatus status,
                      @Param("updatedAt") LocalDateTime updatedAt);

@@ -5,12 +5,13 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class ExecutionRequest {
-    private Long jobId;
+    private UUID jobId;
     private String jobName;
     private String payload;
     private LocalDateTime scheduleTime;
