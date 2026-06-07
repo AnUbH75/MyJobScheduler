@@ -1,0 +1,150 @@
+version: '3.8'
+
+services:
+
+  jobscheduler-postgres:
+    image: postgres:16
+    container_name: jobscheduler-postgres
+    environment:
+      POSTGRES_DB: jobscheduler
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d jobscheduler"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  jobscheduler-redis:
+    image: redis:7
+    container_name: jobscheduler-redis
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  jobscheduler-zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: jobscheduler-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  jobscheduler-kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: jobscheduler-kafka
+    depends_on:
+      - jobscheduler-zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: jobscheduler-zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://jobscheduler-kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # ── Microservices ──
+
+  job-service:
+    build:
+      context: ./job-service
+    container_name: job-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://jobscheduler-postgres:5432/jobscheduler
+      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_PASSWORD: admin123
+      SPRING_DATA_REDIS_HOST: jobscheduler-redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: jobscheduler-kafka:29092
+    depends_on:
+      jobscheduler-postgres:
+        condition: service_healthy
+      jobscheduler-redis:
+        condition: service_healthy
+      jobscheduler-kafka:
+        condition: service_healthy
+
+  job-search-service:
+    build:
+      context: ./job-search-service
+    container_name: job-search-service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://jobscheduler-postgres:5432/jobscheduler
+      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_PASSWORD: admin123
+    depends_on:
+      jobscheduler-postgres:
+        condition: service_healthy
+
+  watcher-service:
+    build:
+      context: ./watcher-service
+    container_name: watcher-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://jobscheduler-postgres:5432/jobscheduler
+      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_PASSWORD: admin123
+      SPRING_DATA_REDIS_HOST: jobscheduler-redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: jobscheduler-kafka:29092
+    depends_on:
+      jobscheduler-postgres:
+        condition: service_healthy
+      jobscheduler-redis:
+        condition: service_healthy
+      jobscheduler-kafka:
+        condition: service_healthy
+
+  job-consumer-service:
+    build:
+      context: ./job-consumer-service
+    container_name: job-consumer-service
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: jobscheduler-kafka:29092
+      EXECUTOR_BASE_URL: http://executor-service:8085
+    depends_on:
+      jobscheduler-kafka:
+        condition: service_healthy
+
+  executor-service:
+    build:
+      context: ./executor-service
+    container_name: executor-service
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://jobscheduler-postgres:5432/jobscheduler
+      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_PASSWORD: admin123
+      SPRING_DATA_REDIS_HOST: jobscheduler-redis
+      SPRING_DATA_REDIS_PORT: 6379
+    depends_on:
+      jobscheduler-postgres:
+        condition: service_healthy
+      jobscheduler-redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
