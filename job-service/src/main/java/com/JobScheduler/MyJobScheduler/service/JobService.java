@@ -13,8 +13,10 @@ import com.JobScheduler.MyJobScheduler.repository.JobRepo;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -25,7 +27,7 @@ public class JobService {
 
     private final JobRepo jobRepo;
     private final JobProducer jobProducer;
-
+    private final RedisTemplate<String, String> redisTemplate;
     // POST /v1/api/jobs
     @Transactional
     public JobResponse createJob(CreateJobRequest request) {
@@ -90,6 +92,7 @@ public class JobService {
         }
 
         jobRepo.updateStatusById(jobId, JobStatus.CANCELLED, LocalDateTime.now());
+        redisTemplate.opsForValue().set("cancel:" + jobId, "CANCEL_REQUESTED", Duration.ofMinutes(5));
         log.info("Job cancelled: {}", jobId);
     }
 
